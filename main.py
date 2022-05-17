@@ -18,7 +18,7 @@ from dash import Dash
 def load_data(path, sheet=0):
     filename = os.path.basename(path).strip()
     if isinstance(sheet, str):
-        print('Loading ' + filename + ', ' + 'Sheet: ' + sheet + '...')
+        print(f'Loading {filename}, Sheet: {sheet}...')
     else:
         print('Loading ' + filename + '...')
     df_data = pd.read_excel(path, sheet)
