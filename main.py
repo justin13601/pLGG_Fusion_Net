@@ -11,19 +11,20 @@ import sys
 import csv
 import time
 import random
-from google.cloud import bigquery
 import numpy as np
 import pandas as pd
+from google.cloud import bigquery
 
 import torch
 import plotly
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import KFold
-from sklearn.feature_selection import RFE
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import average_precision_score
+from sklearn.model_selection import GridSearchCV
+from sklearn.feature_selection import RFE
 from sklearn.feature_selection import VarianceThreshold
+from sklearn.metrics import average_precision_score
 from sklearn.metrics import roc_curve
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import confusion_matrix
@@ -95,7 +96,7 @@ def preprocess_sickkids(df, location_2):
     if location_2:
         # one-hot-encoding for Location 2
         location_2_OHE = pd.get_dummies(df["Location_2"], prefix="Location_2")
-        df = pd.concat([df, location_2_OHE], axis=1)
+        df = pd.concat([df, location_2_OHE], axis='columns')
 
     # remove unnecessary columns
     df = df.drop(columns=['code', 'WT', 'NF1', 'CDKN2A (0=balanced, 1=Del, 2=Undetermined)', 'FGFR 1',
@@ -103,14 +104,14 @@ def preprocess_sickkids(df, location_2):
                           'Pathology Coded', 'Location_2', 'Location_Original'])
 
     # create labels and drop non mutation/fusion entries
-    df['label'] = df.apply(lambda x: create_label(x['BRAF V600E final'], x['BRAF fusion final']), axis=1)
+    df['label'] = df.apply(lambda x: create_label(x['BRAF V600E final'], x['BRAF fusion final']), axis='columns')
     df = df.drop(columns=["BRAF V600E final", "BRAF fusion final"])
     label_nanmask = np.isnan(df["label"])
     df = df.loc[~label_nanmask]
     df.reset_index(inplace=True, drop=True)
 
     # encode gender
-    df['Gender'] = df.apply(lambda x: encode_gender(x['Gender']), axis=1)
+    df['Gender'] = df.apply(lambda x: encode_gender(x['Gender']), axis='columns')
     df = df.dropna()
 
     return df, location_2_OHE
@@ -129,7 +130,7 @@ def preprocess_stanford(df, df2, location_2, all_location_2_OHEs):
         for i in range(len(location_2_OHE.columns)):
             if location_2_OHE.columns[i] not in all_location_2_OHEs.columns:
                 all_location_2_OHEs.insert(i, location_2_OHE.columns[i], 0)
-        df = pd.concat([df, location_2_OHE], axis=1)
+        df = pd.concat([df, location_2_OHE], axis='columns')
 
     # remove unnecessary columns
     df = df.drop(columns=['code', 'FGFR 3', 'NF1', 'CDKN2A (0=balanced, 1=Del, 2=Undetermined)', 'FGFR 1',
@@ -137,14 +138,14 @@ def preprocess_stanford(df, df2, location_2, all_location_2_OHEs):
                           'Pathology Coded', 'Location_2', 'Location_Original'])
 
     # create labels and drop non mutation/fusion entries
-    df['label'] = df.apply(lambda x: create_label(x['BRAF V600E final'], x['BRAF fusion final']), axis=1)
+    df['label'] = df.apply(lambda x: create_label(x['BRAF V600E final'], x['BRAF fusion final']), axis='columns')
     df = df.drop(columns=["BRAF V600E final", "BRAF fusion final"])
     label_nanmask = np.isnan(df["label"])
     df = df.loc[~label_nanmask]
     df.reset_index(inplace=True, drop=True)
 
     # encode gender
-    df['Gender'] = df.apply(lambda x: encode_gender(x['Gender']), axis=1)
+    df['Gender'] = df.apply(lambda x: encode_gender(x['Gender']), axis='columns')
     df = df.dropna()
 
     ### Stanford_new
@@ -157,26 +158,143 @@ def preprocess_stanford(df, df2, location_2, all_location_2_OHEs):
         for i in range(len(location_2_OHE_new.columns)):
             if location_2_OHE_new.columns[i] not in all_location_2_OHEs.columns:
                 all_location_2_OHEs.insert(i, location_2_OHE_new.columns[i], 0)
-        df2 = pd.concat([df2, location_2_OHE_new], axis=1)
+        df2 = pd.concat([df2, location_2_OHE_new], axis='columns')
 
     # remove unnecessary columns
     df2 = df2.drop(columns=['Code', 'HistoPathologicDiagnosis', 'Location_2'])
 
     # create labels and drop non relevant marker entries
-    df2['label'] = df2.apply(lambda x: create_label_from_marker(x['MolecularMarker']), axis=1)
+    df2['label'] = df2.apply(lambda x: create_label_from_marker(x['MolecularMarker']), axis='columns')
     df2 = df2.drop(columns=["MolecularMarker"])
     label_nanmask = np.isnan(df2["label"])
     df2 = df2.loc[~label_nanmask]
     df2.reset_index(inplace=True, drop=True)
 
     # encode gender
-    df2['Gender'] = df2.apply(lambda x: encode_gender(x['Gender']), axis=1)
+    df2['Gender'] = df2.apply(lambda x: encode_gender(x['Gender']), axis='columns')
 
     # reformat age
-    df2.insert(3, 'Age Dx', df2.apply(lambda x: (x['Age at DGN (months)'] / 12), axis=1))
+    df2.insert(3, 'Age Dx', df2.apply(lambda x: (x['Age at DGN (months)'] / 12), axis='columns'))
     df2 = df2.drop(columns=["Age at DGN (months)"])
 
     return df, df2, all_location_2_OHEs
+
+
+def split_data(data, seed):
+    Y = data["label"].to_numpy()
+    X = data.drop(columns=["label"])
+
+    # train-validation split, 25% validation
+    X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=0.25, random_state=seed)
+    return X_train, X_val, Y_train, Y_val
+
+
+def feature_selection(method, X_train):
+    if method == "naive":
+        print('naive')
+    if method == "rfe":
+        print('rfe')
+    if method == "other":
+        print('other')
+    return X_train
+
+
+def remove_correlated_features(X_train=None, X_val=None, X_test=None, threshold=0.98):
+    if X_train is not None:
+        correlation_matrix = X_train.corr().abs()
+        upper_triangle = correlation_matrix.where(np.triu(np.ones(correlation_matrix.shape), k=1).astype(bool))
+        to_drop = [column for column in upper_triangle.columns if any(upper_triangle[column] > threshold)]
+        X_train = X_train.drop(to_drop, axis='columns')
+        if X_val is not None:
+            X_val = X_val.drop(to_drop, axis='columns')
+        if X_test is not None:
+            X_test = X_test.drop(to_drop, axis='columns')
+    return X_train, X_val, X_test
+
+
+def variance_threshold(X_train=None, X_val=None, X_test=None):
+    selector = VarianceThreshold()
+    X_train = selector.fit_transform(X_train)
+    X_val = selector.transform(X_val)
+    X_test = selector.transform(X_test)
+    return X_train, X_val, X_test
+
+
+def execute_experiment(num_trials, k, grid_parameters, df_SK, df_SF, OHEs, location_2, feature_selection_method):
+    for t in range(num_trials):
+        print("\r", f"Trial: {t + 1}/{num_trials}...", end="")
+
+        # set new seed for each trial
+        seed = np.random.randint(10000)
+        result = []
+        naive_combo_auc = []
+
+        kfold = StratifiedKFold(n_splits=k, shuffle=True, random_state=seed)
+
+        X_train, X_val, Y_train, Y_val = split_data(df_SK, seed)  # sickkids internal train/val
+
+        # stanford external test
+        Y_test = df_SF["label"].to_numpy()
+        X_test = df_SF.drop(columns=["label"])
+
+        # remove clinical data columns
+        clinical_vars = ['Location_1', 'Gender', 'Age Dx']
+        if location_2:
+            clinical_vars += list(OHEs.columns)
+        X_train = X_train.drop(clinical_vars, axis='columns')
+        X_val = X_val.drop(clinical_vars, axis='columns')
+        X_test = X_test.drop(clinical_vars, axis='columns')
+
+        # remove highly correlated features and apply variance threshold
+        X_train, X_val, X_test = remove_correlated_features(X_train, X_val, X_test, threshold=0.98)
+        X_train, X_val, X_test = variance_threshold(X_train, X_val, X_test)
+
+        # fit radiomics model on training data
+        rfc = RandomForestClassifier(n_jobs=-1)  # all CPUs used
+        rfc_cv = GridSearchCV(estimator=rfc, param_grid=grid_parameters, cv=kfold, verbose=0, scoring="roc_auc",
+                              n_jobs=-1, return_train_score=True, refit=True)
+        fit_model = rfc_cv.fit(X_train, Y_train)
+        best_model_radiomics = fit_model.best_estimator_
+        best_score_radiomics = rfc_cv.best_score_
+
+        # # get predictions for radiomics model
+        # predictions_val_radiomics = best_model_radiomics.predict_proba(X_val)
+        # predictions_test_radiomics = best_model_radiomics.predict_proba(X_test)
+
+        # # store validation scores for radiomics and feature selection model
+        # all_folds_preds_val_radiomics = []
+        # all_folds_preds_val_feature_selection = []
+        # all_folds_true_val = []
+
+        # # feature selection model
+        # X_train_feature_selection = X_train
+        # if feature_selection_method is not None:
+        #     X_train_feature_selection = feature_selection(feature_selection_method, X_train)
+
+        #     rfc_feature_selection = RandomForestClassifier(n_jobs=-1)
+        #     rfc_feature_selection_CV = GridSearchCV(estimator=rfc_feature_selection, param_grid=grid_parameters, cv=kfold, verbose=0, scoring="roc_auc", n_jobs=-1, return_train_score=True)
+        #     fit_model_feature_selection = rfc_feature_selection_CV.fit(X_train_feature_selection, Y_train)
+        #     best_model_feature_selection = fit_model_feature_selection.best_estimator_
+        #     best_score_feature_selection = rfc_feature_selection_CV.best_score_
+
+        #     predictions_val_feature_selection = best_model_feature_selection.predict_proba(X_val)
+        #     predictions_test_feature_selection = best_model_feature_selection.predict_proba(X_test)
+
+        # kfold2 = KFold(n_splits=X_train.shape[0], shuffle=True, random_state=seed)
+
+        # for train_index, val_index in kfold2.split(X_train, Y_train):  # for each fold
+        #     temp1 = best_model_radiomics.fit(X_train[train_index], Y_train[train_index])
+        #     all_folds_preds_val_radiomics.extend(temp1.predict_proba(X_train[val_index])[:,1])
+        #     if feature_selection_method is not None:
+        #         temp2 = best_model_feature_selection.fit(X_train_feature_selection[train_index], Y_train[train_index])
+        #         all_folds_preds_val_feature_selection.extend(temp2.predict_proba(X_train_feature_selection[val_index])[:, 1])
+        #     all_folds_true_val.extend(Y_train[val_index])
+
+        # best_model_radiomics = best_model_radiomics.fit(X_train, Y_train)
+        # best_model_feature_selection = best_model_feature_selection.fit(X_train_feature_selection, Y_train)
+
+        print("\r", f"Trial: {t + 1}/{num_trials}...Completed. Best score: {best_score_radiomics}.\n", end="")
+    return
 
 
 # run
@@ -185,10 +303,10 @@ if __name__ == '__main__':
     pd.set_option('display.max_rows', None)
 
     # Parameters
-    num_trials = 1
-    k = 1  # number of folds for cross-validation
+    num_trials = 2
+    k = 2  # number of folds for cross-validation
     n_important_features = 5
-    feature_selection_method = "naive"
+    feature_selection_method = None  # naive, rfe    - mann whitney u? chi2? selectkbest? spearman rho? anova?
     include_location_2 = False  ################# how does this work? why adding SK OHE to Stanford and then concat with df_stanford?
 
     grid_parameters = {
@@ -201,11 +319,13 @@ if __name__ == '__main__':
         'max_samples': [0.5, 0.75, 1]
     }
 
-    df_sickkids = load_data('Nomogram_study_LGG_data_Nov.27.xlsx', sheet='SK')
+    df_sickkids = load_data(r'C:\Users\Justin\Documents\SickKids\pLGG\Data\Nomogram_study_LGG_data_Nov.27.xlsx',
+                            sheet='SK')
     print(f'Rows: {df_sickkids.shape[0]}, Columns: {df_sickkids.shape[1]}')
-    df_stanford = load_data('Nomogram_study_LGG_data_Nov.27.xlsx', sheet='Stanford')
+    df_stanford = load_data(r'C:\Users\Justin\Documents\SickKids\pLGG\Data\Nomogram_study_LGG_data_Nov.27.xlsx',
+                            sheet='Stanford')
     print(f'Rows: {df_stanford.shape[0]}, Columns: {df_stanford.shape[1]}')
-    df_stanford_new = load_data('Stanford_new_data_09_21.xlsx')
+    df_stanford_new = load_data(r'C:\Users\Justin\Documents\SickKids\pLGG\Data\Stanford_new_data_09_21.xlsx')
     print(f'Rows: {df_stanford_new.shape[0]}, Columns: {df_stanford_new.shape[1]}')
 
     print("Done loading data.\n")
@@ -229,5 +349,7 @@ if __name__ == '__main__':
     print("Stanford data processed.\n")
 
     print(f"Total number of trial(s): {num_trials}, beginning experiment...")
-    execute_experiment(50)
+    execute_experiment(num_trials=num_trials, k=k, grid_parameters=grid_parameters, df_SK=df_sickkids_processed,
+                       df_SF=df_stanford_combined_processed, OHEs=all_location_2_OHEs, location_2=include_location_2,
+                       feature_selection_method=feature_selection_method)
     print(f"{num_trials} trial(s) completed, experiment over.")
