@@ -24,7 +24,7 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.model_selection import GridSearchCV
 from sklearn.feature_selection import RFE
 from sklearn.feature_selection import VarianceThreshold
-from sklearn.metrics import average_precision_score
+from sklearn.metrics import average_precision_score, roc_auc_score
 from sklearn.metrics import roc_curve
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import confusion_matrix
@@ -221,6 +221,7 @@ def variance_threshold(X_train=None, X_val=None, X_test=None):
 
 
 def execute_experiment(num_trials, k, grid_parameters, df_SK, df_SF, OHEs, location_2, feature_selection_method):
+    df_result = pd.DataFrame(columns=['Trial #', 'Training AUC', 'Validation AUC', 'SF Testing AUC'])
     for t in range(num_trials):
         print("\r", f"Trial: {t + 1}/{num_trials}...", end="")
 
@@ -257,31 +258,39 @@ def execute_experiment(num_trials, k, grid_parameters, df_SK, df_SF, OHEs, locat
         best_model_radiomics = fit_model.best_estimator_
         best_score_radiomics = rfc_cv.best_score_
 
-        # # get predictions for radiomics model
-        # predictions_val_radiomics = best_model_radiomics.predict_proba(X_val)
-        # predictions_test_radiomics = best_model_radiomics.predict_proba(X_test)
+        # get predictions for radiomics model
+        predictions_val_radiomics = best_model_radiomics.predict_proba(X_val)
+        predictions_test_radiomics = best_model_radiomics.predict_proba(X_test)
+
+        training_auc = fit_model.cv_results_['mean_train_score'][fit_model.best_index_]
+        validation_auc = roc_auc_score(Y_val, predictions_val_radiomics[:, 1])
+        testing_auc = roc_auc_score(Y_test, predictions_test_radiomics[:, 1])
+
+        print(f"\nTraining AUC: {training_auc}")
+        print(f"Validation AUC: {validation_auc}")
+        print(f"Stanford Testing AUC: {testing_auc}")
 
         # # store validation scores for radiomics and feature selection model
+        # all_folds_true_val = []
         # all_folds_preds_val_radiomics = []
         # all_folds_preds_val_feature_selection = []
-        # all_folds_true_val = []
-
+        #
         # # feature selection model
         # X_train_feature_selection = X_train
         # if feature_selection_method is not None:
         #     X_train_feature_selection = feature_selection(feature_selection_method, X_train)
-
+        #
         #     rfc_feature_selection = RandomForestClassifier(n_jobs=-1)
         #     rfc_feature_selection_CV = GridSearchCV(estimator=rfc_feature_selection, param_grid=grid_parameters, cv=kfold, verbose=0, scoring="roc_auc", n_jobs=-1, return_train_score=True)
         #     fit_model_feature_selection = rfc_feature_selection_CV.fit(X_train_feature_selection, Y_train)
         #     best_model_feature_selection = fit_model_feature_selection.best_estimator_
         #     best_score_feature_selection = rfc_feature_selection_CV.best_score_
-
+        #
         #     predictions_val_feature_selection = best_model_feature_selection.predict_proba(X_val)
         #     predictions_test_feature_selection = best_model_feature_selection.predict_proba(X_test)
-
+        #
         # kfold2 = KFold(n_splits=X_train.shape[0], shuffle=True, random_state=seed)
-
+        #
         # for train_index, val_index in kfold2.split(X_train, Y_train):  # for each fold
         #     temp1 = best_model_radiomics.fit(X_train[train_index], Y_train[train_index])
         #     all_folds_preds_val_radiomics.extend(temp1.predict_proba(X_train[val_index])[:,1])
@@ -289,12 +298,16 @@ def execute_experiment(num_trials, k, grid_parameters, df_SK, df_SF, OHEs, locat
         #         temp2 = best_model_feature_selection.fit(X_train_feature_selection[train_index], Y_train[train_index])
         #         all_folds_preds_val_feature_selection.extend(temp2.predict_proba(X_train_feature_selection[val_index])[:, 1])
         #     all_folds_true_val.extend(Y_train[val_index])
-
+        #
         # best_model_radiomics = best_model_radiomics.fit(X_train, Y_train)
         # best_model_feature_selection = best_model_feature_selection.fit(X_train_feature_selection, Y_train)
 
+        trial_results = {'Trial #': [t], 'Training AUC': [training_auc], 'Validation AUC': [validation_auc],
+                         'SF Testing AUC': [testing_auc]}
+        df_trial = pd.DataFrame(trial_results)
+        df_result = pd.concat([df_result, df_trial], axis=0, ignore_index=True)
         print("\r", f"Trial: {t + 1}/{num_trials}...Completed. Best score: {best_score_radiomics}.\n", end="")
-    return
+    return df_result
 
 
 # run
@@ -303,9 +316,9 @@ if __name__ == '__main__':
     pd.set_option('display.max_rows', None)
 
     # Parameters
-    num_trials = 2
-    k = 2  # number of folds for cross-validation
-    n_important_features = 5
+    num_trials = 10
+    k = 5  # number of folds for cross-validation
+    n_important_features = 50
     feature_selection_method = None  # naive, rfe    - mann whitney u? chi2? selectkbest? spearman rho? anova?
     include_location_2 = False  ################# how does this work? why adding SK OHE to Stanford and then concat with df_stanford?
 
@@ -349,7 +362,15 @@ if __name__ == '__main__':
     print("Stanford data processed.\n")
 
     print(f"Total number of trial(s): {num_trials}, beginning experiment...")
-    execute_experiment(num_trials=num_trials, k=k, grid_parameters=grid_parameters, df_SK=df_sickkids_processed,
-                       df_SF=df_stanford_combined_processed, OHEs=all_location_2_OHEs, location_2=include_location_2,
-                       feature_selection_method=feature_selection_method)
+    results = execute_experiment(num_trials=num_trials, k=k, grid_parameters=grid_parameters,
+                                 df_SK=df_sickkids_processed,
+                                 df_SF=df_stanford_combined_processed, OHEs=all_location_2_OHEs,
+                                 location_2=include_location_2,
+                                 feature_selection_method=feature_selection_method)
     print(f"{num_trials} trial(s) completed, experiment over.")
+
+    curr_directory = os.path.dirname(os.path.realpath(__file__))
+    sub_directory = "results"
+    file_name = "RFC_results_" + time.strftime("%Y_%m_%d-%H_%M_%S") + ".csv"
+    filepath = os.path.join(curr_directory, sub_directory, file_name)
+    results.to_csv(filepath, index=False)
