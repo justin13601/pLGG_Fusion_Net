@@ -10,34 +10,40 @@ import os
 import sys
 import csv
 import time
+import glob
+import socket
 import random
 import numpy as np
 import pandas as pd
 from google.cloud import bigquery
 
 import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+from torch.utils.data import Dataset, DataLoader
 import plotly
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.model_selection import KFold
-from sklearn.model_selection import StratifiedKFold
-from sklearn.model_selection import GridSearchCV
-from sklearn.feature_selection import RFE
-from sklearn.feature_selection import VarianceThreshold
-from sklearn.metrics import average_precision_score, roc_auc_score
-from sklearn.metrics import roc_curve
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import train_test_split, KFold, StratifiedKFold, GridSearchCV
+from sklearn.feature_selection import RFE, VarianceThreshold
+from sklearn.metrics import average_precision_score, roc_auc_score, roc_curve, accuracy_score, confusion_matrix
+from functools import partial
 
 
-def load_data(path, sheet=0):
-    filename = os.path.basename(path).strip()
-    if isinstance(sheet, str):
-        print(f'Loading {filename}, Sheet: {sheet}...')
-    else:
-        print('Loading ' + filename + '...')
-    df_data = pd.read_excel(path, sheet)
-    return df_data
+def load_data(path, exclusions, test=False):
+    data = {}
+    for root, dirs, files in os.walk(path):
+        dirs.sort(key=int)
+        dirs = list(map(int, dirs))
+        dirs = [patient for patient in dirs if patient not in exclusions]
+        if test:
+            dirs = dirs[:5]
+        for d in dirs:
+            print(f"Loading Patient {d}...")
+            np_filenames = glob.glob(f"{os.path.join(root, f'{d}')}/*/*.npy")
+            data[d] = [np.load(np_filenames[0]), np.load(np_filenames[1])]
+        break
+    return data
 
 
 def random_seed(seed_value, use_cuda):
@@ -60,3 +66,12 @@ if __name__ == '__main__':
     # use numpy files instead of .nii
     # no need to normalize images between [0,1] as input images are already preprocessed
     # https://github.com/kenshohara/3D-ResNets-PyTorch
+
+    num_epochs = 100
+    num_trials = 20
+    batch_size = 8
+    learning_rate = 0.01
+
+    begin_time = time.time()
+
+    images = load_data(r'K:\Projects\SickKids_Brain_Preprocessing\preprocessed_FLAIR_from_tumor_seg_dir', exclusions=[], test=True)

@@ -304,11 +304,7 @@ def get_fine_tuning_parameters(model, ft_begin_module):
     return parameters
 
 
-def load_pretrained_model(model, pretrain_path):
-    pretrain = torch.load(pretrain_path, map_location='cpu')
-    model.load_state_dict(pretrain['state_dict'])
 
-    return model
 
 def load_data_for_patient(patient_num):
     os.chdir(data_dir)
