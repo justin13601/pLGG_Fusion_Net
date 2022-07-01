@@ -1,2 +1,2 @@
-# pLGG Radiomics
-Project by Justin Xu. Reproducing results of radiomics features for BRAF status prediction in pLGG patients.
+# pLGG Predict Status
+Thesis project by Justin Xu. BRAF status prediction using radiomics & ResNet in pLGG patients.
