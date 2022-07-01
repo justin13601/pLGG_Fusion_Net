@@ -189,14 +189,24 @@ def split_data(data, seed):
     return X_train, X_val, Y_train, Y_val
 
 
-def feature_selection(method, X_train):
+def feature_selection(method, X_train, X_val, X_test, model):
     if method == "naive":
-        print('naive')
+        importance = list(model.feature_importances_)
+        importance_sorted = sorted(importance)
+        features_important_index = [i for i in range(X_train.shape[1]) if
+                                    importance[i] >= importance_sorted[-n_important_features]]
+
+        # Create new dataset with only important features
+        X_train_important = X_train[:, features_important_index]
+        X_val_important = X_val[:, features_important_index]
+        X_test_important = X_test[:, features_important_index]
+        return X_train_important, X_val_important, X_test_important
     if method == "rfe":
         print('rfe')
+        return
     if method == "other":
         print('other')
-    return X_train
+        return
 
 
 def remove_correlated_features(X_train=None, X_val=None, X_test=None, threshold=0.98):
@@ -223,7 +233,7 @@ def variance_threshold(X_train=None, X_val=None, X_test=None):
 def execute_experiment(num_trials, k, grid_parameters, df_SK, df_SF, OHEs, location_2, feature_selection_method):
     df_result = pd.DataFrame(columns=['Trial #', 'Training AUC', 'Validation AUC', 'SF Testing AUC'])
     for t in range(num_trials):
-        print("\r", f"Trial: {t + 1}/{num_trials}...", end="")
+        print("\r", f"Starting Trial: {t + 1}/{num_trials}...", end="")
 
         # set new seed for each trial
         seed = np.random.randint(10000)
@@ -276,19 +286,32 @@ def execute_experiment(num_trials, k, grid_parameters, df_SK, df_SF, OHEs, locat
         # all_folds_preds_val_feature_selection = []
         #
         # # feature selection model
-        # X_train_feature_selection = X_train
-        # if feature_selection_method is not None:
-        #     X_train_feature_selection = feature_selection(feature_selection_method, X_train)
-        #
-        #     rfc_feature_selection = RandomForestClassifier(n_jobs=-1)
-        #     rfc_feature_selection_CV = GridSearchCV(estimator=rfc_feature_selection, param_grid=grid_parameters, cv=kfold, verbose=0, scoring="roc_auc", n_jobs=-1, return_train_score=True)
-        #     fit_model_feature_selection = rfc_feature_selection_CV.fit(X_train_feature_selection, Y_train)
-        #     best_model_feature_selection = fit_model_feature_selection.best_estimator_
-        #     best_score_feature_selection = rfc_feature_selection_CV.best_score_
-        #
-        #     predictions_val_feature_selection = best_model_feature_selection.predict_proba(X_val)
-        #     predictions_test_feature_selection = best_model_feature_selection.predict_proba(X_test)
-        #
+        X_train_feature_selection = X_train
+        X_val_feature_selection = X_val
+        X_test_feature_selection = X_test
+        training_feature_selection_auc = []
+        validation_feature_selection_auc = []
+        testing_feature_selection_auc = []
+        if feature_selection_method is not None:
+            X_train_feature_selection, X_val_feature_selection, X_test_feature_selection = feature_selection(
+                feature_selection_method, X_train, X_val, X_test, best_model_radiomics)
+
+            rfc_feature_selection = RandomForestClassifier(n_jobs=-1)
+            rfc_feature_selection_CV = GridSearchCV(estimator=rfc_feature_selection, param_grid=grid_parameters,
+                                                    cv=kfold, verbose=0, scoring="roc_auc", n_jobs=-1,
+                                                    return_train_score=True)
+            fit_model_feature_selection = rfc_feature_selection_CV.fit(X_train_feature_selection, Y_train)
+            best_model_feature_selection = fit_model_feature_selection.best_estimator_
+            best_score_feature_selection = rfc_feature_selection_CV.best_score_
+
+            predictions_val_feature_selection = best_model_feature_selection.predict_proba(X_val_feature_selection)
+            predictions_test_feature_selection = best_model_feature_selection.predict_proba(X_test_feature_selection)
+
+            training_feature_selection_auc = fit_model_feature_selection.cv_results_['mean_train_score'][
+                fit_model_feature_selection.best_index_]
+            validation_feature_selection_auc = roc_auc_score(Y_val, predictions_val_feature_selection[:, 1])
+            testing_feature_selection_auc = roc_auc_score(Y_test, predictions_test_feature_selection[:, 1])
+
         # kfold2 = KFold(n_splits=X_train.shape[0], shuffle=True, random_state=seed)
         #
         # for train_index, val_index in kfold2.split(X_train, Y_train):  # for each fold
@@ -302,8 +325,9 @@ def execute_experiment(num_trials, k, grid_parameters, df_SK, df_SF, OHEs, locat
         # best_model_radiomics = best_model_radiomics.fit(X_train, Y_train)
         # best_model_feature_selection = best_model_feature_selection.fit(X_train_feature_selection, Y_train)
 
-        trial_results = {'Trial #': [t], 'Training AUC': [training_auc], 'Validation AUC': [validation_auc],
-                         'SF Testing AUC': [testing_auc]}
+        trial_results = {'Trial #': [t + 1], 'Training AUC': [training_auc], 'Validation AUC': [validation_auc],
+                         'SF Testing AUC': [testing_auc], 'Training AUC w/ FS': [training_feature_selection_auc],
+                         'Validation AUC w/ FS': [validation_feature_selection_auc], 'SF Testing AUC w/ FS': [testing_feature_selection_auc]}
         df_trial = pd.DataFrame(trial_results)
         df_result = pd.concat([df_result, df_trial], axis=0, ignore_index=True)
         print("\r", f"Trial: {t + 1}/{num_trials}...Completed. Best score: {best_score_radiomics}.\n", end="")
@@ -316,10 +340,10 @@ if __name__ == '__main__':
     pd.set_option('display.max_rows', None)
 
     # Parameters
-    num_trials = 10
+    num_trials = 100
     k = 5  # number of folds for cross-validation
     n_important_features = 50
-    feature_selection_method = None  # naive, rfe    - mann whitney u? chi2? selectkbest? spearman rho? anova?
+    feature_selection_method = 'naive'  # naive, rfe    - mann whitney u? chi2? selectkbest? spearman rho? anova?
     include_location_2 = False  ################# how does this work? why adding SK OHE to Stanford and then concat with df_stanford?
 
     grid_parameters = {
@@ -332,13 +356,13 @@ if __name__ == '__main__':
         'max_samples': [0.5, 0.75, 1]
     }
 
-    df_sickkids = load_data(r'C:\Users\Justin\Documents\SickKids\pLGG\Data\Nomogram_study_LGG_data_Nov.27.xlsx',
+    df_sickkids = load_data(r'C:\Users\Justin\Documents\Data\Nomogram_study_LGG_data_Nov.27.xlsx',
                             sheet='SK')
     print(f'Rows: {df_sickkids.shape[0]}, Columns: {df_sickkids.shape[1]}')
-    df_stanford = load_data(r'C:\Users\Justin\Documents\SickKids\pLGG\Data\Nomogram_study_LGG_data_Nov.27.xlsx',
+    df_stanford = load_data(r'C:\Users\Justin\Documents\Data\Nomogram_study_LGG_data_Nov.27.xlsx',
                             sheet='Stanford')
     print(f'Rows: {df_stanford.shape[0]}, Columns: {df_stanford.shape[1]}')
-    df_stanford_new = load_data(r'C:\Users\Justin\Documents\SickKids\pLGG\Data\Stanford_new_data_09_21.xlsx')
+    df_stanford_new = load_data(r'C:\Users\Justin\Documents\Data\Stanford_new_data_09_21.xlsx')
     print(f'Rows: {df_stanford_new.shape[0]}, Columns: {df_stanford_new.shape[1]}')
 
     print("Done loading data.\n")
