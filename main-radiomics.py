@@ -394,7 +394,7 @@ if __name__ == '__main__':
     print(f"{num_trials} trial(s) completed, experiment over.")
 
     curr_directory = os.path.dirname(os.path.realpath(__file__))
-    sub_directory = "results"
+    sub_directory = "RFC_results"
     file_name = "RFC_results_" + time.strftime("%Y_%m_%d-%H_%M_%S") + ".csv"
     filepath = os.path.join(curr_directory, sub_directory, file_name)
     results.to_csv(filepath, index=False)
