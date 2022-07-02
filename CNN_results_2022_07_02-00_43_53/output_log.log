@@ -1,0 +1,65 @@
+Loading Nomogram_study_LGG_data_Nov.27.xlsx, Sheet: SK...
+Done loading.
+Total number of patients: 215.
+Start-up time: 4.016 seconds.
+
+Loading Patient 1...
+Loading Patient 5...
+Loading Patient 8...
+Loading Patient 10...
+Loading Patient 14...
+Loading Patient 15...
+Loading Patient 17...
+Loading Patient 18...
+Loading Patient 19...
+Loading Patient 20...
+Number of patients included: 10.
+Image loading time: 16.656 seconds.
+
+Beginning trial 0...
+Datasplit -> Training: 6, Validation: 2, Testing: 2.
+Epoch 1: Train err: 3.0, Train loss: 0.7000666260719299, Train AUC: 0.3333333333333333 | Val err: 1.0, Val loss: 50.0, Val AUC: 0.5 
+Epoch 2: Train err: 3.0, Train loss: 0.3806060552597046, Train AUC: 1.0 | Val err: 1.0, Val loss: 50.0, Val AUC: 0.5 
+Finished training.
+Time elapsed: 58.688 seconds.
+Best epoch (lowest validation loss): [0 1], Lowest training error 3.0, Lowest training loss 0.381, Training AUC corresponding to loss: 1.0, Lowest validation error 3.0, Lowest validation loss 50.0, Validation AUC corresponding to loss: 0.5
+Trial 0 ended. Duration: 59.141 seconds.
+
+Beginning trial 1...
+Datasplit -> Training: 6, Validation: 2, Testing: 2.
+Epoch 1: Train err: 3.0, Train loss: 0.7000666260719299, Train AUC: 0.3333333333333333 | Val err: 1.0, Val loss: 50.0, Val AUC: 0.5 
+Epoch 2: Train err: 3.0, Train loss: 0.3806060552597046, Train AUC: 1.0 | Val err: 1.0, Val loss: 50.0, Val AUC: 0.5 
+Finished training.
+Time elapsed: 58.283 seconds.
+Best epoch (lowest validation loss): [0 1], Lowest training error 3.0, Lowest training loss 0.381, Training AUC corresponding to loss: 1.0, Lowest validation error 3.0, Lowest validation loss 50.0, Validation AUC corresponding to loss: 0.5
+Trial 1 ended. Duration: 58.75 seconds.
+
+Beginning trial 2...
+Datasplit -> Training: 6, Validation: 2, Testing: 2.
+Epoch 1: Train err: 3.0, Train loss: 0.7000666260719299, Train AUC: 0.3333333333333333 | Val err: 1.0, Val loss: 50.0, Val AUC: 0.5 
+Epoch 2: Train err: 3.0, Train loss: 0.3806060552597046, Train AUC: 1.0 | Val err: 1.0, Val loss: 50.0, Val AUC: 0.5 
+Finished training.
+Time elapsed: 57.266 seconds.
+Best epoch (lowest validation loss): [0 1], Lowest training error 3.0, Lowest training loss 0.381, Training AUC corresponding to loss: 1.0, Lowest validation error 3.0, Lowest validation loss 50.0, Validation AUC corresponding to loss: 0.5
+Trial 2 ended. Duration: 57.735 seconds.
+
+Beginning trial 3...
+Datasplit -> Training: 6, Validation: 2, Testing: 2.
+Epoch 1: Train err: 3.0, Train loss: 0.7000666260719299, Train AUC: 0.3333333333333333 | Val err: 1.0, Val loss: 50.0, Val AUC: 0.5 
+Epoch 2: Train err: 3.0, Train loss: 0.3806060552597046, Train AUC: 1.0 | Val err: 1.0, Val loss: 50.0, Val AUC: 0.5 
+Finished training.
+Time elapsed: 58.297 seconds.
+Best epoch (lowest validation loss): [0 1], Lowest training error 3.0, Lowest training loss 0.381, Training AUC corresponding to loss: 1.0, Lowest validation error 3.0, Lowest validation loss 50.0, Validation AUC corresponding to loss: 0.5
+Trial 3 ended. Duration: 58.86 seconds.
+
+Beginning trial 4...
+Datasplit -> Training: 6, Validation: 2, Testing: 2.
+Epoch 1: Train err: 3.0, Train loss: 0.7000666260719299, Train AUC: 0.3333333333333333 | Val err: 1.0, Val loss: 50.0, Val AUC: 0.5 
+Epoch 2: Train err: 3.0, Train loss: 0.3806060552597046, Train AUC: 1.0 | Val err: 1.0, Val loss: 50.0, Val AUC: 0.5 
+Finished training.
+Time elapsed: 57.25 seconds.
+Best epoch (lowest validation loss): [0 1], Lowest training error 3.0, Lowest training loss 0.381, Training AUC corresponding to loss: 1.0, Lowest validation error 3.0, Lowest validation loss 50.0, Validation AUC corresponding to loss: 0.5
+Trial 4 ended. Duration: 57.703 seconds.
+
+Experiment done. Time elapsed: 312.861 seconds.
+---------------------
