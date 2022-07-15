@@ -103,6 +103,16 @@ def plot_training_curve(path):
     plt.show()
 
 
+def plot_roc(labels, preds):
+    fpr, tpr, _ = roc_curve(labels, preds)
+    auc = roc_auc_score(labels, preds)
+
+    plt.plot(fpr, tpr, label="data 1, auc=" + str(auc))
+    plt.legend(loc=4)
+    plt.show()
+    return
+
+
 ###############################################################################
 # Model Classes
 class CNNDataset(Dataset):
@@ -383,44 +393,47 @@ def evaluate(net, loader, criterion):
          err: A scalar for the avg classification error over the validation set
          loss: A scalar for the average loss function over the validation set
      """
-    total_err = 0.0
-    total_loss = 0.0
-    total_epoch = 0
-    total_batches = 0
     net.eval()
     with torch.set_grad_enabled(False):
+        total_err = 0.0
+        total_loss = 0.0
+        total_epoch = 0
         true = []
         estimated = []
+        n = 0
         for inputs, labels in loader:
             # Transfer to GPU
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = net(inputs)
             loss = criterion(outputs, labels.float())
+            total_loss += loss.item()
             corr = (outputs > 0.0).squeeze().long() != labels
             total_err += int(corr.sum())
-            total_loss += loss.item() * batch_size
             total_epoch += len(labels)
-            total_batches += 1
-
+            n = n + 1
             for i in range(len(labels.tolist())):
                 true.append(labels.tolist()[i][0])
                 estimated.append(outputs.tolist()[i][0])
 
         auc = roc_auc_score(true, estimated)
-
+        fpr, tpr, _ = roc_curve(true, estimated)
+        total_roc = (fpr, tpr)
     err = float(total_err) / total_epoch
-    loss = float(total_loss) / (total_batches * batch_size)
-    return err, loss, auc
+    loss = float(total_loss) / (n + 1)
+    return err, loss, auc, total_roc
 
 
 def train_net(trial, net, optimizer, criterion, batch_size=64, learning_rate=0.01, num_epochs=30, checkpoint=False,
               save_folder=os.getcwd()):
-    total_train_err = np.zeros(num_epochs)
+    # total_train_err = np.zeros(num_epochs)
     total_train_loss = np.zeros(num_epochs)
     total_train_auc = np.zeros(num_epochs)
-    total_val_err = np.zeros(num_epochs)
+    # total_val_err = np.zeros(num_epochs)
     total_val_loss = np.zeros(num_epochs)
     total_val_auc = np.zeros(num_epochs)
+
+    total_train_roc = []
+    total_val_roc = []
 
     training_start_time = time.time()
 
@@ -429,13 +442,12 @@ def train_net(trial, net, optimizer, criterion, batch_size=64, learning_rate=0.0
 
         # Training
         net.train()
-        train_err = 0
-        train_loss = 0
-        train_batches = 0
+        # train_err = 0.0
+        train_loss = 0.0
+        total_epoch = 0
         training_true = []
         training_estimated = []
-
-        total_epoch = 0
+        n = 0
         for inputs, labels in train_dataloader:
             inputs, labels = inputs.to(device), labels.to(device)
 
@@ -446,7 +458,7 @@ def train_net(trial, net, optimizer, criterion, batch_size=64, learning_rate=0.0
             # Forward + Backward + Optimize
             optimizer.zero_grad()
             outputs = net(inputs)
-            loss = criterion(outputs, labels)
+            loss = criterion(outputs, labels.float())
             loss.backward()
             optimizer.step()
 
@@ -454,65 +466,75 @@ def train_net(trial, net, optimizer, criterion, batch_size=64, learning_rate=0.0
                 scheduler.step()
 
             corr = (outputs > 0.0).squeeze().long() != labels
-            train_err += int(corr.sum())
+            # train_err += int(corr.sum())
             # Keep track of loss through the entire epoch
-            train_loss += loss.item() * batch_size
+            train_loss += loss.item()
             total_epoch += len(labels)
-            train_batches += 1
+            n = n + 1
 
             for i in range(len(labels.tolist())):
                 training_true.append(labels.tolist()[i][0])
                 training_estimated.append(outputs.tolist()[i][0])
 
         # Calculate average over epoch
-        train_err = float(train_err) / total_epoch
-        train_loss = float(train_loss) / (train_batches * batch_size)
+        # total_train_err[epoch] = float(train_err) / total_epoch
+        total_train_loss[epoch] = float(train_loss) / (n + 1)
 
         # Validation
         net.eval()
         with torch.set_grad_enabled(False):
-            val_err = 0
-            val_loss = 0
-            val_batches = 0
+            # val_err = 0.0
+            val_loss = 0.0
+            total_epoch = 0
             validation_true = []
             validation_estimated = []
-
-            total_epoch = 0
+            n = 0
             for inputs, labels in validation_dataloader:
                 inputs, labels = inputs.to(device), labels.to(device)
                 outputs = net(inputs)
+                loss = criterion(outputs, labels.float())
+                val_loss += loss.item()
                 corr = (outputs > 0.0).squeeze().long() != labels
-                val_err += int(corr.sum())
-                loss = criterion(outputs, labels)
-                val_loss += loss.item() * batch_size
+                # val_err += int(corr.sum())
                 total_epoch += len(labels)
-                val_batches += 1
+                n = n + 1
                 for i in range(len(labels.tolist())):
                     validation_true.append(labels.tolist()[i][0])
                     validation_estimated.append(outputs.tolist()[i][0])
 
-            val_err = float(val_err) / total_epoch
-            val_loss = float(val_loss) / (val_batches * batch_size)
+            # total_val_err[epoch] = float(val_err) / total_epoch
+            total_val_loss[epoch] = float(val_loss) / (n + 1)
 
         # Calculate the AUC for the different models
         train_auc = roc_auc_score(training_true, training_estimated)
         val_auc = roc_auc_score(validation_true, validation_estimated)
 
-        total_train_err[epoch] = train_err
-        total_train_loss[epoch] = train_loss
         total_train_auc[epoch] = train_auc
-        total_val_err[epoch] = val_err
-        total_val_loss[epoch] = val_loss
         total_val_auc[epoch] = val_auc
 
-        logging.info("Epoch {}: Train err: {}, Train loss: {}, Train AUC: {} | Val err: {}, Val loss: {}, Val AUC: {} ".format(
-            epoch + 1,
-            total_train_err[epoch],
-            total_train_loss[epoch],
-            total_train_auc[epoch],
-            total_val_err[epoch],
-            total_val_loss[epoch],
-            total_val_auc[epoch]))
+        train_fpr, train_tpr, _ = roc_curve(training_true, training_estimated)
+        val_fpr, val_tpr, _ = roc_curve(validation_true, validation_estimated)
+
+        total_train_roc.append((train_fpr, train_tpr))
+        total_val_roc.append((val_fpr, val_tpr))
+
+        # logging.info(
+        #     "Epoch {}: Train err: {}, Train loss: {}, Train AUC: {} | Val err: {}, Val loss: {}, Val AUC: {} ".format(
+        #         epoch + 1,
+        #         total_train_err[epoch],
+        #         total_train_loss[epoch],
+        #         total_train_auc[epoch],
+        #         total_val_err[epoch],
+        #         total_val_loss[epoch],
+        #         total_val_auc[epoch]))
+
+        logging.info(
+            "Epoch {}: Train loss: {}, Train AUC: {} | Val loss: {}, Val AUC: {} ".format(
+                epoch + 1,
+                total_train_loss[epoch],
+                total_train_auc[epoch],
+                total_val_loss[epoch],
+                total_val_auc[epoch]))
 
         model_path = get_model_name(trial=trial, name=net.name, batch_size=batch_size, learning_rate=learning_rate,
                                     dropout_rate=dropout_rate, epoch=epoch + 1)
@@ -520,16 +542,28 @@ def train_net(trial, net, optimizer, criterion, batch_size=64, learning_rate=0.0
         if checkpoint:
             torch.save(net.state_dict(), model_path)
 
-    np.savetxt(os.path.join(save_folder, "{}_train_err.csv".format(model_path)), total_train_err)
+    # np.savetxt(os.path.join(save_folder, "{}_train_err.csv".format(model_path)), total_train_err)
     np.savetxt(os.path.join(save_folder, "{}_train_loss.csv".format(model_path)), total_train_loss)
     np.savetxt(os.path.join(save_folder, "{}_train_auc.csv".format(model_path)), total_train_auc)
-    np.savetxt(os.path.join(save_folder, "{}_val_err.csv".format(model_path)), total_val_err)
+    # np.savetxt(os.path.join(save_folder, "{}_val_err.csv".format(model_path)), total_val_err)
     np.savetxt(os.path.join(save_folder, "{}_val_loss.csv".format(model_path)), total_val_loss)
     np.savetxt(os.path.join(save_folder, "{}_val_auc.csv".format(model_path)), total_val_auc)
 
+    with open(os.path.join(save_folder, "{}_train_roc.csv".format(model_path)), 'wb') as csvfile:
+        fwriter = csv.writer(csvfile)
+        for x in total_train_roc:
+            fwriter.writerow(x)
+
+    with open(os.path.join(save_folder, "{}_val_roc.csv".format(model_path)), 'wb') as csvfile:
+        fwriter = csv.writer(csvfile)
+        for x in total_val_roc:
+            fwriter.writerow(x)
+
     logging.info('Finished training.')
     logging.info(f'Time elapsed: {round(time.time() - training_start_time, 3)} seconds.')
-    return total_train_err, total_train_loss, total_train_auc, total_val_err, total_val_loss, total_val_auc
+
+    # return total_train_err, total_train_loss, total_train_auc, total_val_err, total_val_loss, total_val_auc
+    return total_train_loss, total_train_auc, total_val_loss, total_val_auc
 
 
 ########################################################################
@@ -604,10 +638,10 @@ if __name__ == '__main__':
     # Parameters
     load_model = False
     use_scheduler = False
-    limit = 10
+    limit = False
 
-    num_trials = 5
-    num_epochs = 2
+    num_trials = 2
+    num_epochs = 25
     batch_size = 8
     learning_rate = 0.01
     dropout_rate = 0.5  # default
@@ -655,6 +689,7 @@ if __name__ == '__main__':
         }
         data[each_patient] = patient
 
+    logging.info("Done loading images.")
     logging.info(f"Number of patients included: {len(patients_used)}.")
     logging.info(f"Image loading time: {round(time.time() - load_image_time, 3)} seconds.\n")
 
@@ -677,14 +712,16 @@ if __name__ == '__main__':
     trial_times = []
 
     for t in range(num_trials):
-        logging.info(f"Beginning trial {t+1}...")
+        logging.info(f"Beginning trial {t + 1} of {num_trials}...")
         begin_trial_time = time.time()
 
         # Set the seed for this iteration
-        seed = 1
-        random_seed(seed, True)
-        next_seed = random.randint(0, 1000)
-        seed = next_seed
+        if t == 0:
+            random_seed(1, True)
+            next_seed = random.randint(0, 1000)
+        else:
+            random_seed(next_seed, True)
+            next_seed = random.randint(0, 1000)
 
         dataset = CNNDataset(data, patients_used)
         train_size = int(0.6 * len(dataset))
@@ -705,13 +742,13 @@ if __name__ == '__main__':
 
         net.to(device)
 
-        criterion = nn.BCELoss()
+        criterion = nn.BCEWithLogitsLoss()
         optimizer = optim.Adam(net.parameters(), lr=learning_rate)
 
         if use_scheduler:
             scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=75, gamma=0.1)
 
-        results = train_net(trial=t+1,
+        results = train_net(trial=t + 1,
                             net=net,
                             optimizer=optimizer,
                             criterion=criterion,
@@ -719,9 +756,10 @@ if __name__ == '__main__':
                             learning_rate=learning_rate,
                             num_epochs=num_epochs, save_folder=save_folder)
 
-        train_err, train_loss, train_auc, val_err, val_loss, val_auc = results
+        # train_err, train_loss, train_auc, val_err, val_loss, val_auc = results
+        train_loss, train_auc, val_loss, val_auc = results
 
-        epoch = np.where(val_loss == min(val_loss))
+        epoch = np.where(val_loss == min(val_loss))[0]
         best_epochs.append(epoch[0])
 
         best_train_auc = train_auc[np.where(train_loss == min(train_loss))]
@@ -730,13 +768,19 @@ if __name__ == '__main__':
         best_val_auc = val_auc[np.where(val_loss == min(val_loss))]
         validation_aucs.append(best_val_auc[0])
 
+        # logging.info(f"Best epoch (lowest validation loss): {epoch[0]}, "
+        #              f"Lowest training error {round(min(train_err), 3)}, "
+        #              f"Lowest training loss {round(min(train_loss), 3)}, "
+        #              f"Training AUC corresponding to loss: {round(best_train_auc[0], 3)}, "
+        #              f"Lowest validation error {round(min(train_err), 3)}, "
+        #              f"Lowest validation loss {round(min(val_loss), 3)}, "
+        #              f"Validation AUC corresponding to loss: {round(best_val_auc[0], 3)}")
+
         logging.info(f"Best epoch (lowest validation loss): {epoch[0]}, "
-              f"Lowest training error {round(min(train_err), 3)}, "
-              f"Lowest training loss {round(min(train_loss), 3)}, "
-              f"Training AUC corresponding to loss: {round(best_train_auc[0], 3)}, "
-              f"Lowest validation error {round(min(train_err), 3)}, "
-              f"Lowest validation loss {round(min(val_loss), 3)}, "
-              f"Validation AUC corresponding to loss: {round(best_val_auc[0], 3)}")
+                     f"Lowest training loss {round(min(train_loss), 3)}, "
+                     f"Training AUC corresponding to loss: {round(best_train_auc[0], 3)}, "
+                     f"Lowest validation loss {round(min(val_loss), 3)}, "
+                     f"Validation AUC corresponding to loss: {round(best_val_auc[0], 3)}")
 
         trial_duration = time.time() - begin_trial_time
         trial_times.append(round(trial_duration, 3))
