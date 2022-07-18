@@ -515,8 +515,8 @@ def train_net(trial, net, optimizer, criterion, batch_size=64, learning_rate=0.0
         train_fpr, train_tpr, _ = roc_curve(training_true, training_estimated)
         val_fpr, val_tpr, _ = roc_curve(validation_true, validation_estimated)
 
-        total_train_roc.append((train_fpr, train_tpr))
-        total_val_roc.append((val_fpr, val_tpr))
+        # total_train_roc.append((train_fpr, train_tpr))
+        # total_val_roc.append((val_fpr, val_tpr))
 
         # logging.info(
         #     "Epoch {}: Train err: {}, Train loss: {}, Train AUC: {} | Val err: {}, Val loss: {}, Val AUC: {} ".format(
@@ -549,15 +549,15 @@ def train_net(trial, net, optimizer, criterion, batch_size=64, learning_rate=0.0
     np.savetxt(os.path.join(save_folder, "{}_val_loss.csv".format(model_path)), total_val_loss)
     np.savetxt(os.path.join(save_folder, "{}_val_auc.csv".format(model_path)), total_val_auc)
 
-    with open(os.path.join(save_folder, "{}_train_roc.csv".format(model_path)), 'wb') as csvfile:
-        fwriter = csv.writer(csvfile)
-        for x in total_train_roc:
-            fwriter.writerow(x)
-
-    with open(os.path.join(save_folder, "{}_val_roc.csv".format(model_path)), 'wb') as csvfile:
-        fwriter = csv.writer(csvfile)
-        for x in total_val_roc:
-            fwriter.writerow(x)
+    # with open(os.path.join(save_folder, "{}_train_roc.csv".format(model_path)), 'wb') as csvfile:
+    #     fwriter = csv.writer(csvfile)
+    #     for x in total_train_roc:
+    #         fwriter.writerow(x)
+    #
+    # with open(os.path.join(save_folder, "{}_val_roc.csv".format(model_path)), 'wb') as csvfile:
+    #     fwriter = csv.writer(csvfile)
+    #     for x in total_val_roc:
+    #         fwriter.writerow(x)
 
     logging.info('Finished training.')
     logging.info(f'Time elapsed: {round(time.time() - training_start_time, 3)} seconds.')
@@ -640,19 +640,23 @@ if __name__ == '__main__':
     use_scheduler = False
     limit = False
 
-    num_trials = 2
-    num_epochs = 25
+    num_trials = 10
+    num_epochs = 15
     batch_size = 8
     learning_rate = 0.01
     dropout_rate = 0.5  # default
     inplanes = [64, 128, 256, 512]
 
-    excluded_patients = [9.0, 12.0, 23.0, 37.0, 58.0, 74.0, 78.0, 85.0, 121.0, 122.0, 130.0, 131.0, 138.0, 140.0, 150.0,
-                         171.0, 176.0, 182.0, 204.0, 213.0, 221.0, 224.0, 234.0, 245.0, 246.0, 274.0, 306.0, 311.0,
-                         312.0, 330.0, 334.0, 347.0, 349.0, 352.0, 354.0, 359.0, 364.0, 377.0,
-                         235.0, 243.0, 255.0, 261.0, 264.0, 283.0, 288.0, 293.0,
-                         299.0, 309.0, 325.0, 327.0, 333.0, 334.0, 356.0, 367.0,
-                         376.0, 383.0, 387.0]
+    excluded_patients = [2, 3, 4, 6, 7, 9, 11, 12, 13, 16, 21, 23, 25, 28, 29, 30, 33, 35, 36, 37, 38, 44, 45, 49, 50,
+                         52, 53, 54, 55, 58, 59, 61, 63, 66, 73, 74, 75, 77, 78, 80, 84, 85, 86, 92, 95, 96, 98, 100,
+                         102, 103, 105, 107, 108, 110, 113, 117, 121, 122, 123, 125, 128, 130, 131, 132, 136, 137, 138,
+                         139, 140, 141, 142, 143, 147, 148, 150, 152, 156, 158, 159, 165, 166, 171, 173, 174, 176, 182,
+                         183, 184, 187, 190, 191, 192, 194, 196, 199, 203, 204, 209, 210, 213, 221, 222, 224, 226, 227,
+                         228, 232, 233, 234, 235, 237, 240, 242, 243, 245, 246, 250, 254, 255, 256, 258, 259, 260, 261,
+                         263, 264, 266, 270, 272, 274, 277, 278, 283, 284, 285, 288, 293, 298, 299, 303, 306, 309, 311,
+                         312, 317, 318, 319, 321, 322, 324, 325, 327, 328, 330, 332, 333, 334, 336, 337, 341, 343, 347,
+                         349, 350, 351, 352, 354, 356, 359, 364, 367, 370, 371, 374, 376, 377, 378, 380, 383, 386, 387,
+                         388, 392, 396]
 
     if torch.cuda.is_available():
         device = "cuda"
