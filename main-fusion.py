@@ -494,9 +494,9 @@ def train_net(trial, net, optimizer, criterion, batch_size=64, learning_rate=0.0
             validation_true = []
             validation_estimated = []
             n = 0
-            for inputs, labels in validation_dataloader:
-                inputs, labels = inputs.to(device), labels.to(device)
-                outputs = net(inputs)
+            for inputs, labels, features in validation_dataloader:
+                inputs, labels, features = inputs.to(device), labels.to(device), features.to(device)
+                outputs = net(inputs, features)
                 loss = criterion(outputs, labels.float())
                 val_loss += loss.item()
                 corr = (outputs > 0.0).squeeze().long() != labels
