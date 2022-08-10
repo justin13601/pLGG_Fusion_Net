@@ -423,7 +423,8 @@ def evaluate(net, loader, criterion):
     return err, loss, auc, total_roc
 
 
-def train_net(train_dataloader, val_dataloader, test_dataloader, trial, net, optimizer, criterion, batch_size=64, learning_rate=0.01, num_epochs=30, checkpoint=False,
+def train_net(train_dataloader, val_dataloader, test_dataloader, trial, net, optimizer, criterion, batch_size=64,
+              learning_rate=0.01, num_epochs=30, checkpoint=False,
               save_folder=os.getcwd()):
     # total_train_err = np.zeros(num_epochs)
     total_train_loss = np.zeros(num_epochs)
@@ -431,6 +432,9 @@ def train_net(train_dataloader, val_dataloader, test_dataloader, trial, net, opt
     # total_val_err = np.zeros(num_epochs)
     total_val_loss = np.zeros(num_epochs)
     total_val_auc = np.zeros(num_epochs)
+
+    total_test_loss = np.zeros(num_epochs)
+    total_test_auc = np.zeros(num_epochs)
 
     total_train_roc = []
     total_val_roc = []
@@ -465,7 +469,7 @@ def train_net(train_dataloader, val_dataloader, test_dataloader, trial, net, opt
             if use_scheduler:
                 scheduler.step()
 
-            corr = (outputs > 0.0).squeeze().long() != labels
+            # corr = (outputs > 0.0).squeeze().long() != labels
             # train_err += int(corr.sum())
             # Keep track of loss through the entire epoch
             train_loss += loss.item()
@@ -494,7 +498,7 @@ def train_net(train_dataloader, val_dataloader, test_dataloader, trial, net, opt
                 outputs = net(inputs)
                 loss = criterion(outputs, labels.float())
                 val_loss += loss.item()
-                corr = (outputs > 0.0).squeeze().long() != labels
+                # corr = (outputs > 0.0).squeeze().long() != labels
                 # val_err += int(corr.sum())
                 total_epoch += len(labels)
                 n = n + 1
@@ -502,18 +506,39 @@ def train_net(train_dataloader, val_dataloader, test_dataloader, trial, net, opt
                     validation_true.append(labels.tolist()[i][0])
                     validation_estimated.append(outputs.tolist()[i][0])
 
-            # total_val_err[epoch] = float(val_err) / total_epoch
-            total_val_loss[epoch] = float(val_loss) / (n + 1)
+            # test_err = 0.0
+            test_loss = 0.0
+            total_epoch = 0
+            test_true = []
+            test_estimated = []
+            n = 0
+            for inputs, labels in test_dataloader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = net(inputs)
+                loss = criterion(outputs, labels.float())
+                test_loss += loss.item()
+                # corr = (outputs > 0.0).squeeze().long() != labels
+                # val_err += int(corr.sum())
+                total_epoch += len(labels)
+                n = n + 1
+                for i in range(len(labels.tolist())):
+                    test_true.append(labels.tolist()[i][0])
+                    test_estimated.append(outputs.tolist()[i][0])
+            # total_test_err[epoch] = float(test_err) / total_epoch
+            total_test_loss[epoch] = float(test_loss) / (n + 1)
 
         # Calculate the AUC for the different models
         train_auc = roc_auc_score(training_true, training_estimated)
         val_auc = roc_auc_score(validation_true, validation_estimated)
+        test_auc = roc_auc_score(test_true, test_estimated)
 
         total_train_auc[epoch] = train_auc
         total_val_auc[epoch] = val_auc
+        total_test_auc[epoch] = test_auc
 
         train_fpr, train_tpr, _ = roc_curve(training_true, training_estimated)
         val_fpr, val_tpr, _ = roc_curve(validation_true, validation_estimated)
+        test_fpr, test_tpr, _ = roc_curve(test_true, test_estimated)
 
         # total_train_roc.append((train_fpr, train_tpr))
         # total_val_roc.append((val_fpr, val_tpr))
@@ -529,12 +554,14 @@ def train_net(train_dataloader, val_dataloader, test_dataloader, trial, net, opt
         #         total_val_auc[epoch]))
 
         logging.info(
-            "Epoch {}: Train loss: {}, Train AUC: {} | Val loss: {}, Val AUC: {} ".format(
+            "Epoch {}: Train loss: {}, Train AUC: {} | Val loss: {}, Val AUC: {} | Test loss: {}, Test AUC: {}".format(
                 epoch + 1,
                 total_train_loss[epoch],
                 total_train_auc[epoch],
                 total_val_loss[epoch],
-                total_val_auc[epoch]))
+                total_val_auc[epoch],
+                total_test_loss[epoch],
+                total_test_auc[epoch]))
 
         model_path = get_model_name(trial=trial, name=net.name, batch_size=batch_size, learning_rate=learning_rate,
                                     dropout_rate=dropout_rate, epoch=epoch + 1)
@@ -548,6 +575,9 @@ def train_net(train_dataloader, val_dataloader, test_dataloader, trial, net, opt
     # np.savetxt(os.path.join(save_folder, "{}_val_err.csv".format(model_path)), total_val_err)
     np.savetxt(os.path.join(save_folder, "{}_val_loss.csv".format(model_path)), total_val_loss)
     np.savetxt(os.path.join(save_folder, "{}_val_auc.csv".format(model_path)), total_val_auc)
+
+    np.savetxt(os.path.join(save_folder, "{}_test_loss.csv".format(model_path)), total_test_loss)
+    np.savetxt(os.path.join(save_folder, "{}_test_auc.csv".format(model_path)), total_test_auc)
 
     # with open(os.path.join(save_folder, "{}_train_roc.csv".format(model_path)), 'wb') as csvfile:
     #     fwriter = csv.writer(csvfile)
@@ -563,7 +593,7 @@ def train_net(train_dataloader, val_dataloader, test_dataloader, trial, net, opt
     logging.info(f'Time elapsed: {round(time.time() - training_start_time, 3)} seconds.')
 
     # return total_train_err, total_train_loss, total_train_auc, total_val_err, total_val_loss, total_val_auc
-    return total_train_loss, total_train_auc, total_val_loss, total_val_auc
+    return total_train_loss, total_train_auc, total_val_loss, total_val_auc, total_test_loss, total_test_auc
 
 
 ########################################################################
@@ -712,6 +742,7 @@ if __name__ == '__main__':
 
     training_aucs = []
     validation_aucs = []
+    test_aucs = []
     best_epochs = []
     trial_times = []
 
@@ -762,16 +793,19 @@ if __name__ == '__main__':
                             num_epochs=num_epochs, save_folder=save_folder)
 
         # train_err, train_loss, train_auc, val_err, val_loss, val_auc = results
-        train_loss, train_auc, val_loss, val_auc = results
+        train_loss, train_auc, val_loss, val_auc, test_loss, test_auc = results
 
         epoch = np.where(val_loss == min(val_loss))[0]
         best_epochs.append(epoch[0])
 
-        best_train_auc = train_auc[np.where(train_loss == min(train_loss))]
+        best_train_auc = train_auc[np.where(val_loss == min(val_loss))]
         training_aucs.append(best_train_auc[0])
 
         best_val_auc = val_auc[np.where(val_loss == min(val_loss))]
         validation_aucs.append(best_val_auc[0])
+
+        best_test_auc = test_auc[np.where(val_loss == min(val_loss))]
+        test_aucs.append(best_test_auc[0])
 
         # logging.info(f"Best epoch (lowest validation loss): {epoch[0]}, "
         #              f"Lowest training error {round(min(train_err), 3)}, "
@@ -783,9 +817,10 @@ if __name__ == '__main__':
 
         logging.info(f"Best epoch (lowest validation loss): {epoch[0]}, "
                      f"Lowest training loss {round(min(train_loss), 3)}, "
-                     f"Training AUC corresponding to loss: {round(best_train_auc[0], 3)}, "
                      f"Lowest validation loss {round(min(val_loss), 3)}, "
-                     f"Validation AUC corresponding to loss: {round(best_val_auc[0], 3)}")
+                     f"Training AUC corresponding to lowest validation loss: {round(best_train_auc[0], 3)}, "
+                     f"Validation AUC corresponding to lowest validation loss: {round(best_val_auc[0], 3)}, "
+                     f"Testing AUC corresponding to lowest validation loss: {round(best_test_auc[0], 3)}")
 
         trial_duration = time.time() - begin_trial_time
         trial_times.append(round(trial_duration, 3))
