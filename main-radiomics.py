@@ -185,22 +185,22 @@ def split_data(data, seed):
     X = data.drop(columns=["label"])
 
     # train-validation split, 25% validation
-    X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=0.25, random_state=seed)
-    return X_train, X_val, Y_train, Y_val
+    X_development, X_internal_test, Y_development, Y_internal_test = train_test_split(X, Y, test_size=0.25, random_state=seed)
+    return X_development, X_internal_test, Y_development, Y_internal_test
 
 
-def feature_selection(method, X_train, X_val, X_test, model):
+def feature_selection(method, X_development, X_internal_test, X_external_test, model):
     if method == "naive":
         importance = list(model.feature_importances_)
         importance_sorted = sorted(importance)
-        features_important_index = [i for i in range(X_train.shape[1]) if
+        features_important_index = [i for i in range(X_development.shape[1]) if
                                     importance[i] >= importance_sorted[-n_important_features]]
 
         # Create new dataset with only important features
-        X_train_important = X_train[:, features_important_index]
-        X_val_important = X_val[:, features_important_index]
-        X_test_important = X_test[:, features_important_index]
-        return X_train_important, X_val_important, X_test_important
+        X_development_important = X_development[:, features_important_index]
+        X_internal_test_important = X_internal_test[:, features_important_index]
+        X_external_test_important = X_external_test[:, features_important_index]
+        return X_development_important, X_internal_test_important, X_external_test_important
     if method == "rfe":
         print('rfe')
         return
@@ -209,25 +209,25 @@ def feature_selection(method, X_train, X_val, X_test, model):
         return
 
 
-def remove_correlated_features(X_train=None, X_val=None, X_test=None, threshold=0.98):
-    if X_train is not None:
-        correlation_matrix = X_train.corr().abs()
+def remove_correlated_features(X_development=None, X_internal_test=None, X_external_test=None, threshold=0.98):
+    if X_development is not None:
+        correlation_matrix = X_development.corr().abs()
         upper_triangle = correlation_matrix.where(np.triu(np.ones(correlation_matrix.shape), k=1).astype(bool))
         to_drop = [column for column in upper_triangle.columns if any(upper_triangle[column] > threshold)]
-        X_train = X_train.drop(to_drop, axis='columns')
-        if X_val is not None:
-            X_val = X_val.drop(to_drop, axis='columns')
-        if X_test is not None:
-            X_test = X_test.drop(to_drop, axis='columns')
-    return X_train, X_val, X_test
+        X_development = X_development.drop(to_drop, axis='columns')
+        if X_internal_test is not None:
+            X_internal_test = X_internal_test.drop(to_drop, axis='columns')
+        if X_external_test is not None:
+            X_external_test = X_external_test.drop(to_drop, axis='columns')
+    return X_development, X_internal_test, X_external_test
 
 
-def variance_threshold(X_train=None, X_val=None, X_test=None):
+def variance_threshold(X_development=None, X_internal_test=None, X_external_test=None):
     selector = VarianceThreshold()
-    X_train = selector.fit_transform(X_train)
-    X_val = selector.transform(X_val)
-    X_test = selector.transform(X_test)
-    return X_train, X_val, X_test
+    X_development = selector.fit_transform(X_development)
+    X_internal_test = selector.transform(X_internal_test)
+    X_external_test = selector.transform(X_external_test)
+    return X_development, X_internal_test, X_external_test
 
 
 def execute_experiment(num_trials, k, grid_parameters, df_SK, df_SF, OHEs, location_2, feature_selection_method):
@@ -242,39 +242,39 @@ def execute_experiment(num_trials, k, grid_parameters, df_SK, df_SF, OHEs, locat
 
         kfold = StratifiedKFold(n_splits=k, shuffle=True, random_state=seed)
 
-        X_train, X_val, Y_train, Y_val = split_data(df_SK, seed)  # sickkids internal train/val
+        X_development, X_internal_test, Y_development, Y_internal_test = split_data(df_SK, seed)  # sickkids internal train/val
 
         # stanford external test
-        Y_test = df_SF["label"].to_numpy()
-        X_test = df_SF.drop(columns=["label"])
+        Y_external_test = df_SF["label"].to_numpy()
+        X_external_test = df_SF.drop(columns=["label"])
 
         # remove clinical data columns
         clinical_vars = ['Location_1', 'Gender', 'Age Dx']
         if location_2:
             clinical_vars += list(OHEs.columns)
-        X_train = X_train.drop(clinical_vars, axis='columns')
-        X_val = X_val.drop(clinical_vars, axis='columns')
-        X_test = X_test.drop(clinical_vars, axis='columns')
+        X_development = X_development.drop(clinical_vars, axis='columns')
+        X_internal_test = X_internal_test.drop(clinical_vars, axis='columns')
+        X_external_test = X_external_test.drop(clinical_vars, axis='columns')
 
         # remove highly correlated features and apply variance threshold
-        X_train, X_val, X_test = remove_correlated_features(X_train, X_val, X_test, threshold=0.98)
-        X_train, X_val, X_test = variance_threshold(X_train, X_val, X_test)
+        X_development, X_internal_test, X_external_test = remove_correlated_features(X_development, X_internal_test, X_external_test, threshold=0.98)
+        X_development, X_internal_test, X_external_test = variance_threshold(X_development, X_internal_test, X_external_test)
 
         # fit radiomics model on training data
         rfc = RandomForestClassifier(n_jobs=-1)  # all CPUs used
         rfc_cv = GridSearchCV(estimator=rfc, param_grid=grid_parameters, cv=kfold, verbose=0, scoring="roc_auc",
                               n_jobs=-1, return_train_score=True, refit=True)
-        fit_model = rfc_cv.fit(X_train, Y_train)
+        fit_model = rfc_cv.fit(X_development, Y_development)
         best_model_radiomics = fit_model.best_estimator_
         best_score_radiomics = rfc_cv.best_score_
 
         # get predictions for radiomics model
-        predictions_val_radiomics = best_model_radiomics.predict_proba(X_val)
-        predictions_test_radiomics = best_model_radiomics.predict_proba(X_test)
+        predictions_val_radiomics = best_model_radiomics.predict_proba(X_internal_test)
+        predictions_test_radiomics = best_model_radiomics.predict_proba(X_external_test)
 
         training_auc = fit_model.cv_results_['mean_train_score'][fit_model.best_index_]
-        validation_auc = roc_auc_score(Y_val, predictions_val_radiomics[:, 1])
-        testing_auc = roc_auc_score(Y_test, predictions_test_radiomics[:, 1])
+        validation_auc = roc_auc_score(Y_internal_test, predictions_val_radiomics[:, 1])
+        testing_auc = roc_auc_score(Y_external_test, predictions_test_radiomics[:, 1])
 
         print(f"\nTraining AUC: {training_auc}")
         print(f"Validation AUC: {validation_auc}")
@@ -286,44 +286,44 @@ def execute_experiment(num_trials, k, grid_parameters, df_SK, df_SF, OHEs, locat
         # all_folds_preds_val_feature_selection = []
         #
         # # feature selection model
-        X_train_feature_selection = X_train
-        X_val_feature_selection = X_val
-        X_test_feature_selection = X_test
+        X_development_feature_selection = X_development
+        X_internal_test_feature_selection = X_internal_test
+        X_external_test_feature_selection = X_external_test
         training_feature_selection_auc = []
         validation_feature_selection_auc = []
         testing_feature_selection_auc = []
         if feature_selection_method is not None:
-            X_train_feature_selection, X_val_feature_selection, X_test_feature_selection = feature_selection(
-                feature_selection_method, X_train, X_val, X_test, best_model_radiomics)
+            X_development_feature_selection, X_internal_test_feature_selection, X_external_test_feature_selection = feature_selection(
+                feature_selection_method, X_development, X_internal_test, X_external_test, best_model_radiomics)
 
             rfc_feature_selection = RandomForestClassifier(n_jobs=-1)
             rfc_feature_selection_CV = GridSearchCV(estimator=rfc_feature_selection, param_grid=grid_parameters,
                                                     cv=kfold, verbose=0, scoring="roc_auc", n_jobs=-1,
                                                     return_train_score=True)
-            fit_model_feature_selection = rfc_feature_selection_CV.fit(X_train_feature_selection, Y_train)
+            fit_model_feature_selection = rfc_feature_selection_CV.fit(X_development_feature_selection, Y_development)
             best_model_feature_selection = fit_model_feature_selection.best_estimator_
             best_score_feature_selection = rfc_feature_selection_CV.best_score_
 
-            predictions_val_feature_selection = best_model_feature_selection.predict_proba(X_val_feature_selection)
-            predictions_test_feature_selection = best_model_feature_selection.predict_proba(X_test_feature_selection)
+            predictions_val_feature_selection = best_model_feature_selection.predict_proba(X_internal_test_feature_selection)
+            predictions_test_feature_selection = best_model_feature_selection.predict_proba(X_external_test_feature_selection)
 
             training_feature_selection_auc = fit_model_feature_selection.cv_results_['mean_train_score'][
                 fit_model_feature_selection.best_index_]
-            validation_feature_selection_auc = roc_auc_score(Y_val, predictions_val_feature_selection[:, 1])
-            testing_feature_selection_auc = roc_auc_score(Y_test, predictions_test_feature_selection[:, 1])
+            validation_feature_selection_auc = roc_auc_score(Y_internal_test, predictions_val_feature_selection[:, 1])
+            testing_feature_selection_auc = roc_auc_score(Y_external_test, predictions_test_feature_selection[:, 1])
 
-        # kfold2 = KFold(n_splits=X_train.shape[0], shuffle=True, random_state=seed)
+        # kfold2 = KFold(n_splits=X_development.shape[0], shuffle=True, random_state=seed)
         #
-        # for train_index, val_index in kfold2.split(X_train, Y_train):  # for each fold
-        #     temp1 = best_model_radiomics.fit(X_train[train_index], Y_train[train_index])
-        #     all_folds_preds_val_radiomics.extend(temp1.predict_proba(X_train[val_index])[:,1])
+        # for train_index, val_index in kfold2.split(X_development, Y_development):  # for each fold
+        #     temp1 = best_model_radiomics.fit(X_development[train_index], Y_development[train_index])
+        #     all_folds_preds_val_radiomics.extend(temp1.predict_proba(X_development[val_index])[:,1])
         #     if feature_selection_method is not None:
-        #         temp2 = best_model_feature_selection.fit(X_train_feature_selection[train_index], Y_train[train_index])
-        #         all_folds_preds_val_feature_selection.extend(temp2.predict_proba(X_train_feature_selection[val_index])[:, 1])
-        #     all_folds_true_val.extend(Y_train[val_index])
+        #         temp2 = best_model_feature_selection.fit(X_development_feature_selection[train_index], Y_development[train_index])
+        #         all_folds_preds_val_feature_selection.extend(temp2.predict_proba(X_development_feature_selection[val_index])[:, 1])
+        #     all_folds_true_val.extend(Y_development[val_index])
         #
-        # best_model_radiomics = best_model_radiomics.fit(X_train, Y_train)
-        # best_model_feature_selection = best_model_feature_selection.fit(X_train_feature_selection, Y_train)
+        # best_model_radiomics = best_model_radiomics.fit(X_development, Y_development)
+        # best_model_feature_selection = best_model_feature_selection.fit(X_development_feature_selection, Y_development)
 
         trial_results = {'Trial #': [t + 1], 'Training AUC': [training_auc], 'Validation AUC': [validation_auc],
                          'SF Testing AUC': [testing_auc], 'Training AUC w/ FS': [training_feature_selection_auc],
