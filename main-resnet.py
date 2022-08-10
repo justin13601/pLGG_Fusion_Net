@@ -645,7 +645,10 @@ def process_excel(df_data, exclusions):
 
 
 ########################################################################
-
+# Currently only SK images are used, so "test_dataloader" represents
+# internal testing data. Once Stanford images are processed, they will
+# also be a "testing set" but rather "external testing data".
+########################################################################
 # run
 if __name__ == '__main__':
     start_up_time = time.time()
