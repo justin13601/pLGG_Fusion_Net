@@ -407,8 +407,8 @@ def evaluate(net, loader, criterion):
             outputs = net(inputs)
             loss = criterion(outputs, labels.float())
             total_loss += loss.item()
-            corr = (outputs > 0.0).squeeze().long() != labels
-            total_err += int(corr.sum())
+            # corr = (outputs > 0.0).squeeze().long() != labels
+            # total_err += int(corr.sum())
             total_epoch += len(labels)
             n = n + 1
             for i in range(len(labels.tolist())):
@@ -423,7 +423,7 @@ def evaluate(net, loader, criterion):
     return err, loss, auc, total_roc
 
 
-def train_net(trial, net, optimizer, criterion, batch_size=64, learning_rate=0.01, num_epochs=30, checkpoint=False,
+def train_net(train_dataloader, val_dataloader, test_dataloader, trial, net, optimizer, criterion, batch_size=64, learning_rate=0.01, num_epochs=30, checkpoint=False,
               save_folder=os.getcwd()):
     # total_train_err = np.zeros(num_epochs)
     total_train_loss = np.zeros(num_epochs)
@@ -697,18 +697,18 @@ if __name__ == '__main__':
     logging.info(f"Number of patients included: {len(patients_used)}.")
     logging.info(f"Image loading time: {round(time.time() - load_image_time, 3)} seconds.\n")
 
-    if load_model:
-        try:
-            net = generate_model(model_depth=18, inplanes=inplanes, n_classes=1039)
-            model_path = get_model_name(trial=1, name=net.name, batch_size=batch_size, learning_rate=learning_rate,
-                                        dropout_rate=dropout_rate, epoch=num_epochs)
-            state = torch.load(model_path)
-            net.load_state_dict(state)
-        except FileNotFoundError:
-            logging.info('Model not found.')
-        else:
-            logging.info("Insert code...")
-        sys.exit()
+    # if load_model:
+    #     try:
+    #         net = generate_model(model_depth=18, inplanes=inplanes, n_classes=1039)
+    #         model_path = get_model_name(trial=1, name=net.name, batch_size=batch_size, learning_rate=learning_rate,
+    #                                     dropout_rate=dropout_rate, epoch=num_epochs)
+    #         state = torch.load(model_path)
+    #         net.load_state_dict(state)
+    #     except FileNotFoundError:
+    #         logging.info('Model not found.')
+    #     else:
+    #         logging.info("Insert code...")
+    #     sys.exit()
 
     training_aucs = []
     validation_aucs = []
@@ -752,7 +752,8 @@ if __name__ == '__main__':
         if use_scheduler:
             scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=75, gamma=0.1)
 
-        results = train_net(trial=t + 1,
+        results = train_net(train_dataloader, validation_dataloader, test_dataloader,
+                            trial=t + 1,
                             net=net,
                             optimizer=optimizer,
                             criterion=criterion,
