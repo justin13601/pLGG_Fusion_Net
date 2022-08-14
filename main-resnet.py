@@ -382,8 +382,8 @@ def get_model_name(trial, name, batch_size, learning_rate, dropout_rate, epoch):
 
 ###############################################################################
 # Model Training
-def evaluate(net, loader, criterion):
-    """ Evaluate the network on a data set.
+def evaluate(net, loader, criterion=nn.BCEWithLogitsLoss()):
+    """ Evaluate the network on the validation set.
 
      Args:
          net: PyTorch neural network object
@@ -393,39 +393,42 @@ def evaluate(net, loader, criterion):
          err: A scalar for the avg classification error over the validation set
          loss: A scalar for the average loss function over the validation set
      """
-    net.eval()
-    with torch.set_grad_enabled(False):
-        total_err = 0.0
-        total_loss = 0.0
-        total_epoch = 0
-        true = []
-        estimated = []
-        n = 0
-        for inputs, labels in loader:
-            # Transfer to GPU
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = net(inputs)
-            loss = criterion(outputs, labels.float())
-            total_loss += loss.item()
-            # corr = (outputs > 0.0).squeeze().long() != labels
-            # total_err += int(corr.sum())
-            total_epoch += len(labels)
-            n = n + 1
-            for i in range(len(labels.tolist())):
-                true.append(labels.tolist()[i][0])
-                estimated.append(outputs.tolist()[i][0])
+    total_loss = 0.0
+    total_err = 0.0
+    total_epoch = 0
+    true = []
+    estimated = []
+    for i, data in enumerate(loader, 0):
+        inputs, labels = data
+        # print(labels.float())
+        # print(data)
+        # print(i)
+        use_cuda = True
+        if use_cuda and torch.cuda.is_available():
+            inputs = inputs.cuda()
+            labels = labels.cuda()
+            net = net.cuda()
+        outputs = net(inputs)
+        # print(outputs.float())
+        loss_func = nn.BCEWithLogitsLoss()
+        loss = loss_func(outputs, labels.float())
+        corr = (outputs > 0.0).squeeze().long() != labels
+        total_err += int(corr.sum())
+        total_loss += loss.item()
+        total_epoch += len(labels)
 
-        auc = roc_auc_score(true, estimated)
-        fpr, tpr, _ = roc_curve(true, estimated)
-        total_roc = (fpr, tpr)
+        for i in range(len(labels.tolist())):
+            true.append(labels.tolist()[i][0])
+            estimated.append(outputs.tolist()[i][0])
     err = float(total_err) / total_epoch
-    loss = float(total_loss) / (n + 1)
-    return err, loss, auc, total_roc
+    loss = float(total_loss) / (i + 1)
+    return err, loss, true, estimated
 
 
 def train_net(train_dataloader, val_dataloader, test_dataloader, trial, net, optimizer, criterion, batch_size=64,
               learning_rate=0.01, num_epochs=30, checkpoint=False,
               save_folder=os.getcwd()):
+
     # total_train_err = np.zeros(num_epochs)
     total_train_loss = np.zeros(num_epochs)
     total_train_auc = np.zeros(num_epochs)
@@ -442,10 +445,13 @@ def train_net(train_dataloader, val_dataloader, test_dataloader, trial, net, opt
     training_start_time = time.time()
 
     for epoch in range(num_epochs):
+        if len(total_val_loss) > 3:
+            if total_val_loss[-1] > total_val_loss[-2] > total_val_loss[-3]:
+                break
+
         epoch_start_time = time.time()
 
         # Training
-        net.train()
         # train_err = 0.0
         train_loss = 0.0
         total_epoch = 0
@@ -482,50 +488,14 @@ def train_net(train_dataloader, val_dataloader, test_dataloader, trial, net, opt
 
         # Calculate average over epoch
         # total_train_err[epoch] = float(train_err) / total_epoch
-        total_train_loss[epoch] = float(train_loss) / (n + 1)
+        total_train_loss[epoch] = float(train_loss) / n
 
         # Validation
-        net.eval()
-        with torch.set_grad_enabled(False):
-            # val_err = 0.0
-            val_loss = 0.0
-            total_epoch = 0
-            validation_true = []
-            validation_estimated = []
-            n = 0
-            for inputs, labels in validation_dataloader:
-                inputs, labels = inputs.to(device), labels.to(device)
-                outputs = net(inputs)
-                loss = criterion(outputs, labels.float())
-                val_loss += loss.item()
-                # corr = (outputs > 0.0).squeeze().long() != labels
-                # val_err += int(corr.sum())
-                total_epoch += len(labels)
-                n = n + 1
-                for i in range(len(labels.tolist())):
-                    validation_true.append(labels.tolist()[i][0])
-                    validation_estimated.append(outputs.tolist()[i][0])
+        eval_err_val, eval_loss_val, validation_true, validation_estimated = evaluate(net, val_dataloader)
+        total_val_loss[epoch] = eval_loss_val
 
-            # test_err = 0.0
-            test_loss = 0.0
-            total_epoch = 0
-            test_true = []
-            test_estimated = []
-            n = 0
-            for inputs, labels in test_dataloader:
-                inputs, labels = inputs.to(device), labels.to(device)
-                outputs = net(inputs)
-                loss = criterion(outputs, labels.float())
-                test_loss += loss.item()
-                # corr = (outputs > 0.0).squeeze().long() != labels
-                # val_err += int(corr.sum())
-                total_epoch += len(labels)
-                n = n + 1
-                for i in range(len(labels.tolist())):
-                    test_true.append(labels.tolist()[i][0])
-                    test_estimated.append(outputs.tolist()[i][0])
-            # total_test_err[epoch] = float(test_err) / total_epoch
-            total_test_loss[epoch] = float(test_loss) / (n + 1)
+        eval_err_test, eval_loss_test, test_true, test_estimated = evaluate(net, test_dataloader)
+        total_test_loss[epoch] = eval_loss_test
 
         # Calculate the AUC for the different models
         train_auc = roc_auc_score(training_true, training_estimated)
@@ -658,7 +628,7 @@ if __name__ == '__main__':
     targets = logging.StreamHandler(sys.stdout), logging.FileHandler(os.path.join(save_folder, 'output_log.log'))
     logging.basicConfig(format='%(message)s', level=logging.INFO, handlers=targets)
 
-    random_seed(1, True)
+    random_seed(random.randint(1, 100), True)
     pd.set_option('display.max_rows', None)
 
     # use numpy files instead of .nii
@@ -666,15 +636,15 @@ if __name__ == '__main__':
     # https://github.com/kenshohara/3D-ResNets-PyTorch
 
     radiomics_directory = r'C:\Users\Justin\Documents\Data'
-    image_directory = r'K:\Projects\SickKids_Brain_Preprocessing\preprocessed_FLAIR_from_tumor_seg_dir'
+    image_directory = r'K:\Projects\SickKids_Brain_Preprocessing\preprocessed_all_seq_kk_july_2022'
 
     # Parameters
     load_model = False
     use_scheduler = False
-    limit = False
+    limit = None
 
-    num_trials = 10
-    num_epochs = 15
+    num_trials = 2
+    num_epochs = 2
     batch_size = 8
     learning_rate = 0.01
     dropout_rate = 0.5  # default
@@ -715,9 +685,21 @@ if __name__ == '__main__':
 
     load_image_time = time.time()
     images, patients_used = load_image_data(image_directory, patients=patients_list, limit=limit)
+    data_pre_norm = {}
+    for each_patient in patients_used:
+        image = images[each_patient][0]
+        seg = images[each_patient][1]
+        data_pre_norm[each_patient] = (image, seg)
+    data_post_norm = {}
+    for each_patient in data_pre_norm.keys():
+        image_pre_norm = data_pre_norm[each_patient][0]
+        seg = data_pre_norm[each_patient][1]
+        image_post_norm = (image_pre_norm - np.min(image_pre_norm)) / (np.max(image_pre_norm) - np.min(image_pre_norm))
+        data_post_norm[each_patient] = (image_post_norm, seg)
     data = {}
     for each_patient in patients_used:
-        input = torch.tensor(np.multiply(images[each_patient][0], images[each_patient][1])).float().unsqueeze(0)
+        input = torch.tensor(
+            np.multiply(data_post_norm[each_patient][0], data_post_norm[each_patient][1])).float().unsqueeze(0)
         label = sickkids_labels[each_patient]
         label = torch.tensor(label).float().unsqueeze(0)
         patient = {
@@ -827,6 +809,6 @@ if __name__ == '__main__':
 
         trial_duration = time.time() - begin_trial_time
         trial_times.append(round(trial_duration, 3))
-        logging.info(f"Trial {t} ended. Duration: {round(trial_duration, 3)} seconds.\n")
+        logging.info(f"Trial {t+1} ended. Duration: {round(trial_duration, 3)} seconds.\n")
     logging.info(f'Experiment done. Time elapsed: {round(time.time() - start_up_time, 3)} seconds.')
 logging.info('---------------------')
