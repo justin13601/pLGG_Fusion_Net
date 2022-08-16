@@ -577,7 +577,7 @@ def create_label(mutation, fusion):
         return None
 
 
-def process_excel(df_data, exclusions):
+def process_excel(df_data, exclusions, custom_features=None):
     nanmask = np.isnan(df_data["code"])
     data_data_new = df_data[~nanmask]
     data_data_new = data_data_new.reindex()
@@ -607,10 +607,15 @@ def process_excel(df_data, exclusions):
     data_data_new = data_data_new.drop(columns=["label"])
 
     # Organize the radiomic features into a dictionary with patient codes and corresponding patient features
-    data_data_new.set_index("code", inplace=True)
-    radiomic_features = {}
-    for index, row in data_data_new.iterrows():
-        radiomic_features[index] = row.values
+    if custom_features is not None:
+        radiomic_features = {}
+        for index, row in custom_features.iterrows():
+            radiomic_features[custom_features['id'][index]] = row.values[1:]
+    else:
+        data_data_new.set_index("code", inplace=True)
+        radiomic_features = {}
+        for index, row in data_data_new.iterrows():
+            radiomic_features[index] = row.values
     return radiomic_features, training_labels
 
 
@@ -668,7 +673,8 @@ if __name__ == '__main__':
 
     # Load data
     df_sickkids = load_excel_data(os.path.join(radiomics_directory, 'Nomogram_study_LGG_data_Nov.27.xlsx'), sheet='SK')
-    sickkids_radiomics_features, sickkids_labels = process_excel(df_data=df_sickkids, exclusions=excluded_patients)
+    df_features = pd.read_csv(r'C:\Users\Justin\Documents\Data\radiomics_features_normalized_08-15-22_filtered_851.csv')
+    sickkids_radiomics_features, sickkids_labels = process_excel(df_data=df_sickkids, exclusions=excluded_patients, custom_features=df_features)
 
     # Prepare CNN data
     radiomics_patients_list = set(sickkids_labels.keys())
