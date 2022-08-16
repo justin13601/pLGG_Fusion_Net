@@ -79,7 +79,7 @@ def create_label_from_marker(marker):
         return None
 
 
-def preprocess_sickkids(df, location_2):
+def preprocess_sickkids(df, location_2, custom_features=None):
     excluded_patient_ids = [2, 3, 4, 6, 7, 9, 11, 12, 13, 16, 21, 23, 25, 28, 29, 30, 33, 35, 36, 37, 38, 44, 45, 49, 50,
                          52, 53, 54, 55, 58, 59, 61, 63, 66, 73, 74, 75, 77, 78, 80, 84, 85, 86, 92, 95, 96, 98, 100,
                          102, 103, 105, 107, 108, 110, 113, 117, 121, 122, 123, 125, 128, 130, 131, 132, 136, 137, 138,
@@ -107,6 +107,12 @@ def preprocess_sickkids(df, location_2):
     df = df.drop(columns=['code', 'WT', 'NF1', 'CDKN2A (0=balanced, 1=Del, 2=Undetermined)', 'FGFR 1',
                           'FGFR 2', 'FGFR 4', 'Further gen info', 'Notes', 'Pathology Dx_Original',
                           'Pathology Coded', 'Location_2', 'Location_Original'])
+
+    #using features we extracted
+    if custom_features is not None:
+        df = df[df.columns[:5]]
+        custom_features = custom_features.iloc[:, 1:]
+        df = pd.concat([df, custom_features], axis=1)
 
     # create labels and drop non mutation/fusion entries
     df['label'] = df.apply(lambda x: create_label(x['BRAF V600E final'], x['BRAF fusion final']), axis='columns')
@@ -372,7 +378,8 @@ if __name__ == '__main__':
 
     print("Done loading data.\n")
 
-    df_sickkids_processed, all_location_2_OHEs = preprocess_sickkids(df_sickkids, include_location_2)
+    df_features = pd.read_csv(r'C:\Users\Justin\Documents\Data\radiomics_features_normalized_08-15-22_filtered_851.csv')
+    df_sickkids_processed, all_location_2_OHEs = preprocess_sickkids(df_sickkids, include_location_2, custom_features=df_features)
     print(f'SickKids Data - Rows: {df_sickkids_processed.shape[0]}, Columns: {df_sickkids_processed.shape[1]}')
     print("SickKids data processed.\n")
 
