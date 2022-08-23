@@ -16,7 +16,6 @@ import pandas as pd
 from google.cloud import bigquery
 
 import torch
-import plotly
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import KFold
@@ -379,7 +378,7 @@ if __name__ == '__main__':
     print("Done loading data.\n")
 
     df_features = pd.read_csv(r'C:\Users\Justin\Documents\Data\radiomics_features_normalized_08-15-22_filtered_851.csv')
-    df_sickkids_processed, all_location_2_OHEs = preprocess_sickkids(df_sickkids, include_location_2, custom_features=df_features)
+    df_sickkids_processed, all_location_2_OHEs = preprocess_sickkids(df_sickkids, include_location_2, custom_features=None)
     print(f'SickKids Data - Rows: {df_sickkids_processed.shape[0]}, Columns: {df_sickkids_processed.shape[1]}')
     print("SickKids data processed.\n")
 
