@@ -393,6 +393,7 @@ def evaluate(net, loader, criterion=nn.BCEWithLogitsLoss()):
          err: A scalar for the avg classification error over the validation set
          loss: A scalar for the average loss function over the validation set
      """
+    net.eval()
     total_loss = 0.0
     total_err = 0.0
     total_epoch = 0
@@ -453,6 +454,7 @@ def train_net(train_dataloader, val_dataloader, test_dataloader, trial, net, opt
 
         # Training
         # train_err = 0.0
+        net.train()
         train_loss = 0.0
         total_epoch = 0
         training_true = []
