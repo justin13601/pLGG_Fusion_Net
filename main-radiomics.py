@@ -219,7 +219,7 @@ def feature_selection(method, X_development, X_internal_test, X_external_test, m
         return
 
 
-def remove_correlated_features(X_development=None, X_internal_test=None, X_external_test=None, threshold=0.98):
+def remove_correlated_features(X_development=None, X_internal_test=None, X_external_test=None, threshold=0.95):
     if X_development is not None:
         correlation_matrix = X_development.corr().abs()
         upper_triangle = correlation_matrix.where(np.triu(np.ones(correlation_matrix.shape), k=1).astype(bool))
@@ -267,7 +267,7 @@ def execute_experiment(num_trials, k, grid_parameters, df_SK, df_SF, OHEs, locat
         X_external_test = X_external_test.drop(clinical_vars, axis='columns')
 
         # remove highly correlated features and apply variance threshold
-        X_development, X_internal_test, X_external_test = remove_correlated_features(X_development, X_internal_test, X_external_test, threshold=0.98)
+        X_development, X_internal_test, X_external_test = remove_correlated_features(X_development, X_internal_test, X_external_test, threshold=0.95)
         X_development, X_internal_test, X_external_test = variance_threshold(X_development, X_internal_test, X_external_test)
 
         # fit radiomics model on training data
