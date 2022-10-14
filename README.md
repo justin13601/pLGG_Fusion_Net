@@ -1,4 +1,4 @@
 # pLGG Predict Status
 
-![Title](/title.png)
-![Abstract](/abstract.png)
+![Title](/assets/title.png)
+![Abstract](/assets/abstract.png)
